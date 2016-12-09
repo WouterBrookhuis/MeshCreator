@@ -3,12 +3,13 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public class MeshManager : MonoBehaviour
 {
     private static class Data
     {
-        public static void Deserialize(out List<DraggableMeshPoint> points, out List<Edge> edges, BinaryReader br, DraggableMeshPoint prefab)
+        public static void Deserialize(out List<DraggableMeshPoint> points, out List<Edge> edges, out List<DraggableMeshPoint> triangles, BinaryReader br, DraggableMeshPoint prefab)
         {
             int version = br.ReadInt16();
             int count = br.ReadInt32();
@@ -27,6 +28,7 @@ public class MeshManager : MonoBehaviour
                 instance.transform.position = new Vector3(x, y, z);
                 points.Add(instance);
             }
+
             count = br.ReadInt32();
             edges = new List<Edge>();
             Debug.Log("Edges: " + count);
@@ -40,8 +42,17 @@ public class MeshManager : MonoBehaviour
                     m_pointB = idDict[b]
                 });
             }
+
+            count = br.ReadInt32();
+            triangles = new List<DraggableMeshPoint>();
+            Debug.Log("Triangles: " + count);
+            for(int i = 0; i < count; i++)
+            {
+                int id = br.ReadInt32();
+                triangles.Add(idDict[id]);
+            }
         }
-        public static void Serialize(List<DraggableMeshPoint> points, List<Edge> edges, BinaryWriter bw)
+        public static void Serialize(List<DraggableMeshPoint> points, List<Edge> edges, List<DraggableMeshPoint> triangles, BinaryWriter bw)
         {
             short version = 1;
             bw.Write(version);
@@ -58,6 +69,11 @@ public class MeshManager : MonoBehaviour
             {
                 bw.Write(edge.m_pointA.m_id);
                 bw.Write(edge.m_pointB.m_id);
+            }
+            bw.Write(triangles.Count);
+            foreach(var triangle in triangles)
+            {
+                bw.Write(triangle.m_id);
             }
         }
     }
@@ -84,12 +100,13 @@ public class MeshManager : MonoBehaviour
     private string m_buttonPrimary = "Fire1";
 
     private Camera m_camera;
+    private Plane m_moveToolPlane = new Plane();
 
     private int m_idOffset;
 
     void Awake()
     {
-        m_idOffset = UnityEngine.Random.Range(0, 10000);
+        m_idOffset = 0;
         m_camera = Camera.main;
     }
 
@@ -99,8 +116,6 @@ public class MeshManager : MonoBehaviour
         {
             AddCube();
         }
-       
-        //AddCube(Vector3.up * 3);
     }
 
     void OnApplicationQuit()
@@ -254,6 +269,12 @@ public class MeshManager : MonoBehaviour
 
     void LateUpdate()
     {
+        if(EventSystem.current.IsPointerOverGameObject())
+        {
+            m_selectedPoint = null;
+            return;
+        }
+
         if(m_selectedPoint == null)
         {
             Ray ray = m_camera.ScreenPointToRay(Input.mousePosition);
@@ -267,7 +288,7 @@ public class MeshManager : MonoBehaviour
                     if(Input.GetButtonDown(m_buttonPrimary))
                     {
                         m_selectedPoint = point;
-                        m_zDistance = Vector3.Distance(m_camera.transform.position, m_selectedPoint.transform.position);
+                        m_zDistance = m_camera.transform.worldToLocalMatrix.MultiplyPoint(m_selectedPoint.transform.position).z;
                     }
                 }
             }
@@ -292,6 +313,7 @@ public class MeshManager : MonoBehaviour
             if(edge.m_renderer == null)
             {
                 var go = new GameObject("Edge Renderer (copy)");
+                go.transform.SetParent(transform);
                 go.layer = edge.m_pointA.gameObject.layer;
                 edge.m_renderer = go.AddComponent<LineRenderer>();
                 edge.m_renderer.startWidth = 0.04f;
@@ -307,37 +329,53 @@ public class MeshManager : MonoBehaviour
         {
             if(Input.GetKeyDown(KeyCode.X))
             {
-                var go = new GameObject("MEEESH");
-                var mf = go.AddComponent<MeshFilter>();
-                mf.mesh = GenerateMesh();
-                var mr = go.AddComponent<MeshRenderer>();
-                mr.sharedMaterial = m_meshMaterial;
-                ObjExporter.MeshToFile(mf, Application.dataPath + "/meshdump.obj");
+                ActionGenerateMesh();
             }
             if(Input.GetKeyDown(KeyCode.A))
             {
-                AddCube();
+                ActionAddCube();
             }
             if(Input.GetKeyDown(KeyCode.C))
             {
-                foreach(var edge in m_edges)
-                {
-                    if(edge.m_renderer != null)
-                    {
-                        GameObject.Destroy(edge.m_renderer.gameObject);
-                    }
-                }
-                foreach(var point in m_meshPointHandles)
-                {
-                    if(point != null)
-                    {
-                        GameObject.Destroy(point.gameObject);
-                    }
-                }
-                m_meshPointHandles.Clear();
-                m_edges.Clear();
+                ActionClear();
             }
         }
+    }
+
+    public void ActionClear()
+    {
+        foreach(var edge in m_edges)
+        {
+            if(edge.m_renderer != null)
+            {
+                GameObject.Destroy(edge.m_renderer.gameObject);
+            }
+        }
+        foreach(var point in m_meshPointHandles)
+        {
+            if(point != null)
+            {
+                GameObject.Destroy(point.gameObject);
+            }
+        }
+        m_meshPointHandles.Clear();
+        m_edges.Clear();
+        m_triangles.Clear();
+    }
+
+    public void ActionGenerateMesh()
+    {
+        var go = new GameObject("MESH");
+        var mf = go.AddComponent<MeshFilter>();
+        mf.mesh = GenerateMesh();
+        var mr = go.AddComponent<MeshRenderer>();
+        mr.sharedMaterial = m_meshMaterial;
+        ObjExporter.MeshToFile(mf, Application.dataPath + "/meshdump.obj");
+    }
+
+    public void ActionAddCube()
+    {
+        AddCube();
     }
 
     public Mesh GenerateMesh()
@@ -346,7 +384,7 @@ public class MeshManager : MonoBehaviour
         // f + v - e = 2
         // f = 2 - v + e
         Dictionary<DraggableMeshPoint, int> vertexIndexDict = new Dictionary<DraggableMeshPoint, int>();
-
+        //List<Vector3> vertices = new List<Vector3>();
         Vector3[] vertices = new Vector3[m_meshPointHandles.Count];
         for(int i = 0; i < vertices.Length; i++)
         {
@@ -372,7 +410,7 @@ public class MeshManager : MonoBehaviour
         FileStream file = File.Open(Application.dataPath + "/autosave.build", FileMode.OpenOrCreate);
         file.Seek(0, SeekOrigin.Begin);
         BinaryWriter bw = new BinaryWriter(file);
-        Data.Serialize(m_meshPointHandles, m_edges, bw);
+        Data.Serialize(m_meshPointHandles, m_edges, m_triangles, bw);
         bw.Close();
         file.Close();
     }
@@ -386,7 +424,7 @@ public class MeshManager : MonoBehaviour
                 using(FileStream file = File.Open(Application.dataPath + "/autosave.build", FileMode.Open))
                 using(BinaryReader br = new BinaryReader(file))
                 {
-                    Data.Deserialize(out m_meshPointHandles, out m_edges, br, m_prefab);
+                    Data.Deserialize(out m_meshPointHandles, out m_edges, out m_triangles, br, m_prefab);
                 }
                 return true;
             }
