@@ -15,7 +15,7 @@ public class Singleton<T> : MonoBehaviour where T : Component
                 if(m_instance == null)
                 {
                     m_instance = new GameObject(typeof(T).Name).AddComponent<T>();
-                    DontDestroyOnLoad(m_instance.gameObject);
+                    //DontDestroyOnLoad(m_instance.gameObject);
                 }
             }
             return m_instance;

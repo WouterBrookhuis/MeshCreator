@@ -4,14 +4,14 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class LoadPanelBehaviour : UIBehaviour
+public class TextureLoadPanelBehaviour : UIBehaviour
 {
     public GameObject m_rowTemplate;
 
     private Button m_openFolderButton;
     private Button m_loadButton;
     private Button m_cancelButton;
-    private MeshManager m_meshManager;
+    private UVTool m_uvTool;
     private string m_savePath;
     private RectTransform m_contentList;
     private SelectableRow m_selectedRow;
@@ -20,10 +20,10 @@ public class LoadPanelBehaviour : UIBehaviour
 
     protected override void Awake()
     {
-        m_meshManager = GameObject.FindObjectOfType<MeshManager>();
-        if(m_meshManager == null)
+        m_uvTool = FindObjectOfType<UVTool>();
+        if(m_uvTool == null)
         {
-            Debug.LogWarning("Could not find MeshManager!");
+            Debug.LogWarning("Could not find UVTool!");
         }
     }
 
@@ -50,12 +50,12 @@ public class LoadPanelBehaviour : UIBehaviour
 
     void OnOpen()
     {
-        System.Diagnostics.Process.Start(Path.GetFullPath(PathManager.instance.SavePath));
+        System.Diagnostics.Process.Start(Path.GetFullPath(PathManager.instance.TexturePath));
     }
 
     void OnCancel()
     {
-        gameObject.SetActive(false);
+        Hide();
     }
 
     void OnLoad()
@@ -63,17 +63,24 @@ public class LoadPanelBehaviour : UIBehaviour
         if(m_selectedRow != null)
         {
             string trimmed = m_selectedRow.GetText().Trim().ToLower();
-            m_savePath = PathManager.instance.SavePath + "/" + trimmed + PathManager.instance.m_packageExtension;
+            m_savePath = PathManager.instance.TexturePath + "/" + trimmed;
             if(File.Exists(m_savePath))
             {
-                m_meshManager.Load(m_savePath);
+                Texture2D texture = new Texture2D(2, 2);
+                using(var stream = File.Open(m_savePath, FileMode.Open))
+                {
+                    var bytes = new byte[stream.Length];
+                    stream.Read(bytes, 0, (int)stream.Length);
+                    texture.LoadImage(bytes);
+                    m_uvTool.m_texture = texture;
+                }
                 m_selectedRow.Deselect();
                 gameObject.SetActive(false);
             }
             else
             {
                 // Show popup?
-                UIManager.instance.ShowModal("Load", "The requested file does not exist.", new string[] { "Ok" }, null);
+                UIManager.instance.ShowModal("Load", "The requested file does not exist.");
             }
         }
     }
@@ -96,9 +103,15 @@ public class LoadPanelBehaviour : UIBehaviour
             go.gameObject.SetActive(false);
         }
 
-        var files = Directory.GetFiles(PathManager.instance.SavePath, "*" + PathManager.instance.m_packageExtension);
-        m_contentList.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, files.Length * 30);
-        for(int i = 0; i < files.Length; i++)
+        var files = new List<string>();
+        foreach(var extension in PathManager.instance.m_textureExtensions)
+        {
+            Debug.Log(extension);
+            files.AddRange(Directory.GetFiles(PathManager.instance.TexturePath, "*" + extension));
+        }
+        Debug.Log(files.Count);
+        m_contentList.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, files.Count * 30);
+        for(int i = 0; i < files.Count; i++)
         {
             if(m_rows.Count == i)
             {
@@ -108,7 +121,7 @@ public class LoadPanelBehaviour : UIBehaviour
                 m_rows.Add(row);
             }
             m_rows[i].gameObject.SetActive(true);
-            m_rows[i].SetText(Path.GetFileNameWithoutExtension(files[i]));
+            m_rows[i].SetText(Path.GetFileName(files[i]));
         }
     }
 }

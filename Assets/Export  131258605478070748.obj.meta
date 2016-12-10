@@ -1,27 +1,17 @@
 fileFormatVersion: 2
-guid: 044cb10f36af73646b0cd2b43d35a7bd
-timeCreated: 1481126163
+guid: 40ec9860189c4d5458a538cd156d2635
+timeCreated: 1481383396
 licenseType: Free
 ModelImporter:
   serializedVersion: 19
   fileIDToRecycleName:
-    100000: MEEESH
+    100000: default
     100002: //RootNode
-    100004: MESH
-    100006: default
-    400000: MEEESH
+    400000: default
     400002: //RootNode
-    400004: MESH
-    400006: default
-    2300000: MEEESH
-    2300002: MESH
-    2300004: default
-    3300000: MEEESH
-    3300002: MESH
-    3300004: default
-    4300000: MEEESH
-    4300002: MESH
-    4300004: default
+    2300000: default
+    3300000: default
+    4300000: default
   materials:
     importMaterials: 1
     materialName: 0

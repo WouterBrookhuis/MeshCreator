@@ -1,17 +1,40 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public class UVTool : MonoBehaviour
 {
+    struct TriangleIndex
+    {
+        public MeshManager.Triangle m_triangle;
+        public int m_index;
+    }
+
     public Texture2D m_texture;
     public Material m_material;
+    public Material m_backgroundMaterial;
+    public Material m_lineMaterial;
     public bool m_active;
+    public float m_meshSideLength;
+    public LayerMask m_dragPointMask;
+    public DraggableMeshPoint m_handleTemplate;
 
     private Mesh m_backgroundMesh;
     private Texture2D m_prevTexture;
     private bool m_wasActive;
+    private MeshManager m_meshManager;
     private List<DraggableMeshPoint> m_dragHandles = new List<DraggableMeshPoint>();
+    private List<MeshManager.Edge> m_edges = new List<MeshManager.Edge>();
+    private Dictionary<DraggableMeshPoint, List<TriangleIndex>> m_dict = new Dictionary<DraggableMeshPoint, List<TriangleIndex>>();
+    private DraggableMeshPoint m_selectedPoint;
+    private string m_buttonPrimary = "Fire1";
+    private float m_zDistance;
+
+    void Awake()
+    {
+        m_meshManager = FindObjectOfType<MeshManager>();
+    }
 
     void Update()
     {
@@ -20,13 +43,15 @@ public class UVTool : MonoBehaviour
             m_wasActive = m_active;
             if(!m_active)
             {
-                CameraController.main.SetPerspective(20.0f);
-                CameraController.main.m_enableInput = true;
+                CameraController.main.SetPerspective(45.0f);
+                CameraController.main.ReleaseFixedPoint();
+                CameraController.main.GetCamera("UV Handles Camera").enabled = false;
             }
             else
             {
                 CameraController.main.SetOrthographic(4);
-                CameraController.main.m_enableInput = false;
+                CameraController.main.SetFixedPoint();
+                CameraController.main.GetCamera("UV Handles Camera").enabled = true;
             }
         }
         if(m_active)
@@ -40,9 +65,68 @@ public class UVTool : MonoBehaviour
 
             if(m_texture != null && m_backgroundMesh != null)
             {
-                Matrix4x4 matrix = Matrix4x4.TRS(new Vector3(0, 0, 90), Quaternion.Euler(0, 180, 0), Vector3.one * 0.3f);
-                Graphics.DrawMesh(m_backgroundMesh, CameraController.main.Transform.localToWorldMatrix * matrix, m_material, gameObject.layer);
+                Matrix4x4 matrix = Matrix4x4.TRS(new Vector3(0, 0, 90), Quaternion.Euler(0, 180, 0), Vector3.one);
+                Graphics.DrawMesh(m_backgroundMesh, matrix, m_material, gameObject.layer);
             }
+            Matrix4x4 matrix2 = Matrix4x4.TRS(new Vector3(0, 0, 91), Quaternion.Euler(0, 180, 0), Vector3.one * 3);
+            Graphics.DrawMesh(m_backgroundMesh,matrix2, m_backgroundMaterial, gameObject.layer);
+        }
+    }
+
+    void LateUpdate()
+    {
+        if(!m_active)
+            return;
+
+        if(m_selectedPoint == null)
+        {
+            if(!EventSystem.current.IsPointerOverGameObject())
+            {
+                Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+                RaycastHit hit;
+                if(Physics.Raycast(ray, out hit, 1000f, m_dragPointMask))
+                {
+                    DraggableMeshPoint point = hit.collider.GetComponent<DraggableMeshPoint>();
+                    if(point != null)
+                    {
+                        point.Highlight();
+                        if(Input.GetButtonDown(m_buttonPrimary))
+                        {
+                            m_selectedPoint = point;
+                            m_zDistance = m_selectedPoint.transform.position.z;
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            if(Input.GetButtonUp(m_buttonPrimary))
+            {
+                m_selectedPoint = null;
+            }
+            else
+            {
+                m_selectedPoint.Select();
+                if(Input.GetButton(m_buttonPrimary))
+                {
+                    var vector = Camera.main.ScreenToWorldPoint(new Vector3(Input.mousePosition.x, Input.mousePosition.y, m_zDistance));
+                    vector.z = m_zDistance;
+                    m_selectedPoint.transform.position = vector;
+                    foreach(var triangle in m_dict[m_selectedPoint])
+                    {
+                        triangle.m_triangle.m_uvs[triangle.m_index] = WorldToUv(vector);
+                    }
+                }
+            }
+        }
+
+        for(int i = 0; i < m_edges.Count; i++)
+        {
+            var edge = m_edges[i];
+            
+            edge.m_renderer.SetPosition(0, edge.m_pointA.transform.position);
+            edge.m_renderer.SetPosition(1, edge.m_pointB.transform.position);
         }
     }
 
@@ -50,15 +134,19 @@ public class UVTool : MonoBehaviour
     {
         Mesh mesh = new Mesh();
         var vertices = new Vector3[4];
-        vertices[0] = new Vector3(-texture.width, texture.height) * unitsPerPixel * 0.5f;
+        /*vertices[0] = new Vector3(-texture.width, texture.height) * unitsPerPixel * 0.5f;
         vertices[1] = new Vector3(texture.width, texture.height) * unitsPerPixel * 0.5f;
         vertices[2] = new Vector3(texture.width, -texture.height) * unitsPerPixel * 0.5f;
-        vertices[3] = new Vector3(-texture.width, -texture.height) * unitsPerPixel * 0.5f;
+        vertices[3] = new Vector3(-texture.width, -texture.height) * unitsPerPixel * 0.5f;*/
+        vertices[0] = new Vector3(-m_meshSideLength, m_meshSideLength)  * 0.5f;
+        vertices[1] = new Vector3(m_meshSideLength, m_meshSideLength)   * 0.5f;
+        vertices[2] = new Vector3(m_meshSideLength, -m_meshSideLength)  * 0.5f;
+        vertices[3] = new Vector3(-m_meshSideLength, -m_meshSideLength) * 0.5f;
         var uv = new Vector2[4];
-        uv[0] = new Vector2(0, 1);
-        uv[1] = new Vector2(1, 1);
-        uv[2] = new Vector2(1, 0);
-        uv[3] = new Vector2(0, 0);
+        uv[0] = new Vector2(1, 1);
+        uv[1] = new Vector2(0, 1);
+        uv[2] = new Vector2(0, 0);
+        uv[3] = new Vector2(1, 0);
         var triangles = new int[6];
         triangles[0] = 0;
         triangles[1] = 2;
@@ -75,6 +163,103 @@ public class UVTool : MonoBehaviour
         mesh.RecalculateBounds();
         mesh.RecalculateNormals();
         return mesh;
+    }
+
+    public void CreateHandles(List<MeshManager.Triangle> triangles)
+    {
+        m_dict.Clear();
+        List<Vector3> vertices;
+        List<Vector3> normals;
+        Dictionary<int, Dictionary<DraggableMeshPoint, int>> smoothingGroups;
+        GetVertices(triangles, out vertices, out normals, out smoothingGroups);
+
+        while(vertices.Count > m_dragHandles.Count)
+        {
+            var go = Instantiate(m_handleTemplate);
+            m_dragHandles.Add(go);
+        }
+
+        foreach(var handle in m_dragHandles)
+        {
+            handle.gameObject.SetActive(false);
+        }
+
+        // Lines
+        while(triangles.Count * 3 > m_edges.Count)
+        {
+            MeshManager.Edge edge = new MeshManager.Edge();
+            var go = new GameObject("UV Edge Renderer (copy)");
+            go.transform.SetParent(transform);
+            go.layer = gameObject.layer;
+            edge.m_renderer = go.AddComponent<LineRenderer>();
+            edge.m_renderer.startWidth = 0.04f;
+            edge.m_renderer.endWidth = 0.04f;
+            edge.m_renderer.sharedMaterial = m_lineMaterial;
+            m_edges.Add(edge);
+        }
+
+        foreach(var edge in m_edges)
+        {
+            edge.m_renderer.gameObject.SetActive(false);
+        }
+
+        int edgeIndex = 0;
+
+        foreach(var triangle in triangles)
+        {
+            for(int i = 0; i < triangle.m_uvs.Length; i++)
+            {
+                int vertexIndex = smoothingGroups[triangle.m_smoothGroupIndex][triangle.m_points[i]];
+                if(!m_dragHandles[vertexIndex].gameObject.activeSelf)
+                {
+                    m_dragHandles[vertexIndex].gameObject.SetActive(true);
+                    m_dragHandles[vertexIndex].transform.position = UvToWorld(triangle.m_uvs[i]);
+                    m_dict.Add(m_dragHandles[vertexIndex], new List<TriangleIndex>());
+                }
+                m_dict[m_dragHandles[vertexIndex]].Add(new TriangleIndex
+                {
+                    m_index = i,
+                    m_triangle = triangle
+                });
+
+
+                if(i % 3 == 0)
+                {
+                    m_edges[edgeIndex].m_pointA = m_dragHandles[vertexIndex];
+                    m_edges[edgeIndex + 2].m_pointB = m_dragHandles[vertexIndex];
+                }
+                else if(i % 3 == 1)
+                {
+                    m_edges[edgeIndex].m_pointB = m_dragHandles[vertexIndex];
+                    m_edges[edgeIndex + 1].m_pointA = m_dragHandles[vertexIndex];
+                }
+                else if(i % 3 == 2)
+                {
+                    m_edges[edgeIndex + 1].m_pointB = m_dragHandles[vertexIndex];
+                    m_edges[edgeIndex + 2].m_pointA = m_dragHandles[vertexIndex];
+                }
+            }
+            m_edges[edgeIndex].m_renderer.gameObject.SetActive(true);
+            m_edges[edgeIndex + 1].m_renderer.gameObject.SetActive(true);
+            m_edges[edgeIndex + 2].m_renderer.gameObject.SetActive(true);
+            edgeIndex += 3;
+        }
+    }
+
+    private Vector3 UvToWorld(Vector2 uv)
+    {
+        Vector3 pos = new Vector3(uv.x, uv.y) * m_meshSideLength;
+        pos -= new Vector3(m_meshSideLength, m_meshSideLength) * 0.5f;
+        pos.z = 40;
+        return pos;
+    }
+
+    private Vector2 WorldToUv(Vector3 world)
+    {
+        Vector2 pos = new Vector2(world.x, world.y) + new Vector2(m_meshSideLength, m_meshSideLength) * 0.5f;
+        pos /= m_meshSideLength;
+        Debug.Log(world + " - " + pos);
+        return pos;
     }
 
     public void Unwrap(ref List<MeshManager.Triangle> triangles)

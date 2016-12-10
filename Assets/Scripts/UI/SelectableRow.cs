@@ -8,7 +8,6 @@ public class SelectableRow : Button
     public delegate void OnClicked(SelectableRow row);
     public event OnClicked eventClicked;
 
-    private bool m_isSelected;
     private Color m_normalColor;
     private Text m_text;
 
@@ -32,7 +31,6 @@ public class SelectableRow : Button
 
     private void OnClickListener()
     {
-        m_isSelected = true;
         var c = colors;
         c.normalColor = c.pressedColor;
         colors = c;

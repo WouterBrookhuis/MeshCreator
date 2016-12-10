@@ -37,15 +37,21 @@ public class UISlidingAnimator : MonoBehaviour
     {
         if(Mathf.Abs(m_position - m_targetPosition) > 0.005f)
         {
+            RecalculateStartPosition();
             float delta = Mathf.Clamp(m_targetPosition - m_position, -m_moveSpeed * Time.deltaTime, m_moveSpeed * Time.deltaTime);
             m_position = Mathf.Clamp01(m_position + delta);
             ApplyPosition();
         }
     }
 
+    void RecalculateStartPosition()
+    {
+        m_startPosition = m_transform.position - Vector3.Lerp(m_closeOffset, m_openOffset, m_position);
+    }
+
     void ApplyPosition()
     {
-        m_transform.position = Vector3.Lerp(m_startPosition + m_closeOffset, m_startPosition + m_openOffset, m_position);
+        m_transform.position = Vector3.Lerp(m_closeOffset, m_openOffset, m_position) + m_startPosition;
     }
 
     void Jump(float position)

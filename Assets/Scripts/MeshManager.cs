@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -9,9 +10,19 @@ public class MeshManager : MonoBehaviour
 {
     private static class Data
     {
-        public static void Deserialize(out List<DraggableMeshPoint> points, out List<Edge> edges, out List<Triangle> triangles, BinaryReader br, DraggableMeshPoint prefab)
+        public static void Deserialize(out List<DraggableMeshPoint> points, out List<Edge> edges, out List<Triangle> triangles, out int nextFreeId, BinaryReader br, DraggableMeshPoint prefab)
         {
             int version = br.ReadInt16();
+            nextFreeId = 0;
+            int maxId = 0;
+
+            if(version >= 3)
+            {
+                nextFreeId = br.ReadInt32();
+            }
+
+            Debug.Log("Next Free Id: " + nextFreeId);
+
             int count = br.ReadInt32();
             points = new List<DraggableMeshPoint>();
             Debug.Log("Points: " + count);
@@ -20,12 +31,13 @@ public class MeshManager : MonoBehaviour
             {
                 var instance = Instantiate(prefab);
                 instance.m_id = br.ReadInt32();
+                if(instance.m_id > maxId)
+                {
+                    maxId = instance.m_id;
+                }
+                Debug.Log("Adding id: " + instance.m_id);
                 idDict.Add(instance.m_id, instance);
-                float x, y, z;
-                x = br.ReadSingle();
-                y = br.ReadSingle();
-                z = br.ReadSingle();
-                instance.transform.position = new Vector3(x, y, z);
+                instance.transform.position = br.ReadVector3();
                 points.Add(instance);
             }
 
@@ -52,26 +64,40 @@ public class MeshManager : MonoBehaviour
                 int idA = br.ReadInt32();
                 int idB = br.ReadInt32();
                 int idC = br.ReadInt32();
+                Vector2 uvA = Vector2.zero, uvB = Vector2.zero, uvC = Vector2.zero;
+                if(version >= 2)
+                {
+                    uvA = br.ReadVector2();
+                    uvB = br.ReadVector2();
+                    uvC = br.ReadVector2();
+                }
                 triangles.Add(new Triangle
                 {
                     m_smoothGroupIndex = smoothingGroup,
                     m_pointA = idDict[idA],
                     m_pointB = idDict[idB],
                     m_pointC = idDict[idC],
+                    m_uvA = uvA,
+                    m_uvB = uvB,
+                    m_uvC = uvC,
                 });
             }
+
+            if(version <3)
+            {
+                nextFreeId = maxId + 1;
+            }
         }
-        public static void Serialize(List<DraggableMeshPoint> points, List<Edge> edges, List<Triangle> triangles, BinaryWriter bw)
+        public static void Serialize(List<DraggableMeshPoint> points, List<Edge> edges, List<Triangle> triangles, int nextFreeId, BinaryWriter bw)
         {
-            short version = 1;
+            short version = 3;
             bw.Write(version);
+            bw.Write(nextFreeId);
             bw.Write(points.Count);
             foreach(var point in points)
             {
                 bw.Write(point.m_id);
-                bw.Write(point.transform.position.x);
-                bw.Write(point.transform.position.y);
-                bw.Write(point.transform.position.z);
+                bw.Write(point.transform.position);
             }
             bw.Write(edges.Count);
             foreach(var edge in edges)
@@ -86,11 +112,14 @@ public class MeshManager : MonoBehaviour
                 bw.Write(triangle.m_pointA.m_id);
                 bw.Write(triangle.m_pointB.m_id);
                 bw.Write(triangle.m_pointC.m_id);
+                bw.Write(triangle.m_uvA);
+                bw.Write(triangle.m_uvB);
+                bw.Write(triangle.m_uvC);
             }
         }
     }
 
-    private struct Edge
+    public class Edge
     {
         public DraggableMeshPoint m_pointA;
         public DraggableMeshPoint m_pointB;
@@ -180,6 +209,7 @@ public class MeshManager : MonoBehaviour
     public DraggableMeshPoint m_prefab;
     public Material m_edgeMaterial;
     public Material m_meshMaterial;
+    public bool m_active = true;
 
     private List<DraggableMeshPoint> m_meshPointHandles = new List<DraggableMeshPoint>();
     private List<Edge> m_edges = new List<Edge>();
@@ -189,8 +219,20 @@ public class MeshManager : MonoBehaviour
     private float m_zDistance = 0.0f;
 
     private string m_buttonPrimary = "Fire1";
-
     private Camera m_camera;
+    private string m_name = "New Building";
+
+    public bool m_invalidated;
+
+    private int m_nextFreeId = 0;
+
+    public List<Triangle> Triangles
+    {
+        get
+        {
+            return m_triangles;
+        }
+    }
 
     void Awake()
     {
@@ -218,6 +260,8 @@ public class MeshManager : MonoBehaviour
 
     void AddCube(Vector3 offset)
     {
+        m_invalidated = true;
+
         var t11 = AddHandle(offset + new Vector3(1, 1, 1));
         var t_11 = AddHandle(offset + new Vector3(-1, 1, 1));
         var t1_1 = AddHandle(offset + new Vector3(1, 1, -1));
@@ -385,10 +429,12 @@ public class MeshManager : MonoBehaviour
 
     void AddPyramid(Vector3 offset)
     {
-        var t11a = AddHandle(offset + new Vector3(1, -1, 1));
-        var t_11a = AddHandle(offset + new Vector3(-1, -1, 1));
-        var t1_1a = AddHandle(offset + new Vector3(1, -1, -1));
-        var t_1_1a = AddHandle(offset + new Vector3(-1, -1, -1));
+        m_invalidated = true;
+
+        var t11a = AddHandle(offset + new Vector3(1, 0, 1));
+        var t_11a = AddHandle(offset + new Vector3(-1, 0, 1));
+        var t1_1a = AddHandle(offset + new Vector3(1, 0, -1));
+        var t_1_1a = AddHandle(offset + new Vector3(-1, 0, -1));
         var t010 = AddHandle(offset + new Vector3(0, 1, 0));
 
         //Edges
@@ -451,19 +497,104 @@ public class MeshManager : MonoBehaviour
         triangle.m_pointB = t11a;
         triangle.m_pointC = t_11a;
         m_triangles.Add(triangle);
-    
+
+        // Up
+        // -X
+        triangle = new Triangle();
+        triangle.m_smoothGroupIndex = 1;
+        triangle.m_pointA = t_11a;
+        triangle.m_pointB = t010;
+        triangle.m_pointC = t_1_1a;
+        m_triangles.Add(triangle);
+        // +X
+        triangle = new Triangle();
+        triangle.m_smoothGroupIndex = 2;
+        triangle.m_pointA = t1_1a;
+        triangle.m_pointB = t010;
+        triangle.m_pointC = t11a;
+        m_triangles.Add(triangle);
+        // -Z
+        triangle = new Triangle();
+        triangle.m_smoothGroupIndex = 3;
+        triangle.m_pointA = t_1_1a;
+        triangle.m_pointB = t010;
+        triangle.m_pointC = t1_1a;
+        m_triangles.Add(triangle);
+        // +Z
+        triangle = new Triangle();
+        triangle.m_smoothGroupIndex = 4;
+        triangle.m_pointA = t11a;
+        triangle.m_pointB = t010;
+        triangle.m_pointC = t_11a;
+        m_triangles.Add(triangle);
+    }
+
+    void RemoveConnected(DraggableMeshPoint point)
+    {
+        if(point == null)
+            return;
+
+        m_invalidated = true;
+
+        List<Edge> edges = new List<Edge>();
+        List<Triangle> triangles = new List<Triangle>();
+        HashSet<DraggableMeshPoint> points = new HashSet<DraggableMeshPoint>();
+
+        foreach(var e in m_edges)
+        {
+            if(e.m_pointA == point || e.m_pointB == point)
+            {
+                edges.Add(e);
+                points.Add(e.m_pointA);
+                points.Add(e.m_pointB);
+            }
+        }
+
+        foreach(var t in m_triangles)
+        {
+            if(t.m_pointA == point || t.m_pointB == point || t.m_pointC == point)
+            {
+                triangles.Add(t);
+                points.Add(t.m_pointA);
+                points.Add(t.m_pointB);
+                points.Add(t.m_pointC);
+            }
+        }
+
+        Debug.Log("Triangles removed: " + m_triangles.RemoveAll((x) => triangles.Contains(x)));
+        Debug.Log("Edges removed: " + m_edges.RemoveAll((x) => edges.Contains(x)));
+        Debug.Log("Handles removed: " + m_meshPointHandles.RemoveAll((x) => points.Contains(x)));
+
+        foreach(var p in points)
+        {
+            Destroy(p.gameObject);
+        }
+
+        foreach(var e in edges)
+        {
+            if(e.m_renderer != null)
+            {
+                Destroy(e.m_renderer.gameObject);
+            }
+            RemoveConnected(e.m_pointA);
+            RemoveConnected(e.m_pointB);
+        }
     }
 
     DraggableMeshPoint AddHandle(Vector3 position)
     {
         var instance = Instantiate(m_prefab, position, Quaternion.identity);
         m_meshPointHandles.Add(instance);
-        instance.m_id = m_meshPointHandles.Count;
+        instance.m_id = m_nextFreeId;
+        m_nextFreeId++;
         return instance;
     }
 
     void LateUpdate()
     {
+        if(!m_active)
+            return;
+
         if(m_selectedPoint == null)
         {
             if(!EventSystem.current.IsPointerOverGameObject())
@@ -498,6 +629,10 @@ public class MeshManager : MonoBehaviour
                 {
                     m_selectedPoint.transform.position = m_camera.ScreenToWorldPoint(new Vector3(Input.mousePosition.x, Input.mousePosition.y, m_zDistance));
                 }
+                if(Input.GetKeyDown(KeyCode.Delete))
+                {
+                    RemoveConnected(m_selectedPoint);
+                }
             }
         }
         
@@ -520,14 +655,22 @@ public class MeshManager : MonoBehaviour
         }
     }
 
-    public void ActionUnwrap()
-    {
-        var tool = GetComponentInChildren<UVTool>();
-        tool.Unwrap(ref m_triangles);
-    }
-
     public void ActionClear()
     {
+        UIManager.instance.ShowModal("Clear", "Are you sure you want to clear the scene? All unsaved changes will be lost.",
+            new string[] { "Yes", "No"}, 
+            (i) => {
+                if(i == 0)
+                {
+                    Clear();
+                }
+            });   
+    }
+
+    void Clear()
+    {
+        m_invalidated = true;
+
         foreach(var edge in m_edges)
         {
             if(edge.m_renderer != null)
@@ -547,16 +690,6 @@ public class MeshManager : MonoBehaviour
         m_triangles.Clear();
     }
 
-    public void ActionGenerateMesh()
-    {
-        var go = new GameObject("MESH");
-        var mf = go.AddComponent<MeshFilter>();
-        mf.mesh = GenerateMesh();
-        var mr = go.AddComponent<MeshRenderer>();
-        mr.sharedMaterial = m_meshMaterial;
-        ObjExporter.MeshToFile(mf, Application.dataPath + "/meshdump.obj");
-    }
-
     public void ActionAddCube()
     {
         AddCube();
@@ -572,6 +705,7 @@ public class MeshManager : MonoBehaviour
         DebugUtil.StartStopwatch("GenerateMesh");
 
         Mesh mesh = new Mesh();
+        mesh.name = m_name;
         Dictionary<int, Dictionary<DraggableMeshPoint, int>> smoothingGroups = new Dictionary<int, Dictionary<DraggableMeshPoint, int>>();
         List<Vector3> vertices = new List<Vector3>();
         List<Vector2> uvs = new List<Vector2>();
@@ -614,10 +748,11 @@ public class MeshManager : MonoBehaviour
     public void Save(string fullPath)
     {
         Debug.Log("Saving to " + fullPath);
+        m_name = Path.GetFileNameWithoutExtension(fullPath);
         FileStream file = File.Open(fullPath, FileMode.OpenOrCreate);
         file.Seek(0, SeekOrigin.Begin);
         BinaryWriter bw = new BinaryWriter(file);
-        Data.Serialize(m_meshPointHandles, m_edges, m_triangles, bw);
+        Data.Serialize(m_meshPointHandles, m_edges, m_triangles, m_nextFreeId, bw);
         bw.Close();
         file.Close();
     }
@@ -632,9 +767,10 @@ public class MeshManager : MonoBehaviour
                 using(FileStream file = File.Open(fullPath, FileMode.Open))
                 using(BinaryReader br = new BinaryReader(file))
                 {
-                    ActionClear();
-                    Data.Deserialize(out m_meshPointHandles, out m_edges, out m_triangles, br, m_prefab);
+                    Clear();
+                    Data.Deserialize(out m_meshPointHandles, out m_edges, out m_triangles, out m_nextFreeId, br, m_prefab);
                 }
+                m_name = Path.GetFileNameWithoutExtension(fullPath);
                 return true;
             }
             catch(Exception e)

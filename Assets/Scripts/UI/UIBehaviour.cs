@@ -4,6 +4,16 @@ using UnityEngine;
 
 public class UIBehaviour : MonoBehaviour
 {
+    protected virtual void Start()
+    {
+
+    }
+
+    protected virtual void Awake()
+    {
+
+    }
+
     public virtual void Show()
     {
         gameObject.SetActive(true);
@@ -15,7 +25,12 @@ public class UIBehaviour : MonoBehaviour
     }
 
 
-    public GameObject Find(string name)
+    protected GameObject Find(string name)
+    {
+        return Find(name, transform);
+    }
+
+    protected GameObject Find(string name, Transform transform)
     {
         var t = transform.FindChild(name);
         if(t != null)
@@ -25,12 +40,12 @@ public class UIBehaviour : MonoBehaviour
         return null;
     }
 
-    public GameObject FindNested(string name)
+    protected GameObject FindNested(string name)
     {
         return FindNested(name, transform);
     }
 
-    private GameObject FindNested(string name, Transform transform)
+    protected GameObject FindNested(string name, Transform transform)
     {
         GameObject result = null;
 

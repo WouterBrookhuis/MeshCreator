@@ -9,10 +9,14 @@ public class ObjExporter
     {
         Mesh m = mf.mesh;
         Material[] mats = mf.GetComponent<Renderer>().sharedMaterials;
+        return MeshToString(m, mats);
+    }
 
+    public static string MeshToString(Mesh m, Material[] mats)
+    {
         StringBuilder sb = new StringBuilder();
 
-        sb.Append("g ").Append(mf.name).Append("\n");
+        sb.Append("g ").Append(m.name).Append("\n");
         foreach(Vector3 v in m.vertices)
         {
             sb.Append(string.Format("v {0} {1} {2}\n", v.x, v.y, v.z));

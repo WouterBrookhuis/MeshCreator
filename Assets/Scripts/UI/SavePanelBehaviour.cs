@@ -12,7 +12,7 @@ public class SavePanelBehaviour : UIBehaviour
     private MeshManager m_meshManager;
     private string m_savePath;
 
-    void Awake()
+    protected override void Awake()
     {
         m_meshManager = GameObject.FindObjectOfType<MeshManager>();
         if(m_meshManager == null)
@@ -21,7 +21,7 @@ public class SavePanelBehaviour : UIBehaviour
         }
     }
 
-    void Start()
+    protected override void Start()
     {
         m_nameField = Find("Name").GetComponent<InputField>();
         m_saveButton = Find("Save").GetComponent<Button>();
@@ -42,8 +42,28 @@ public class SavePanelBehaviour : UIBehaviour
 
     void OnSave()
     {
-        m_meshManager.Save(m_savePath);
-        gameObject.SetActive(false);
+        if(File.Exists(m_savePath))
+        {
+            UIManager.instance.ShowModal("Save", "A file with that name already exists, do you want to overwrite it?",
+                new string[] { "Yes", "No" },
+                (i) => {
+                    if(i == 0)
+                    {
+                        m_meshManager.Save(m_savePath);
+                        gameObject.SetActive(false);
+                    }
+                });
+        }
+        else
+        {
+            m_meshManager.Save(m_savePath);
+            gameObject.SetActive(false);
+        }        
+    }
+
+    void DoSave()
+    {
+        
     }
 
     void OnEndEdit(string text)

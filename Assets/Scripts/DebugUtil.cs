@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Reflection;
 using UnityEngine;
 
-public static class DebugUtil
+public class DebugUtil
 {
     public class StopwatchData
     {
