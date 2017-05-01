@@ -13,7 +13,7 @@ public class UICollection : Singleton<UICollection>
         AddUIElements(m_uiElements);
     }
 
-    public void AddUIElements(GameObject[] array)
+    public static void AddUIElements(GameObject[] array)
     {
         foreach(var element in array)
         {
@@ -24,7 +24,7 @@ public class UICollection : Singleton<UICollection>
         }
     }
 
-    public void RemoveUIElements(GameObject[] array)
+    public static void RemoveUIElements(GameObject[] array)
     {
         foreach(var element in array)
         {

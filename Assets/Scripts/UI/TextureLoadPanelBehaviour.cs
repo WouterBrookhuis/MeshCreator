@@ -20,6 +20,7 @@ public class TextureLoadPanelBehaviour : UIBehaviour
 
     protected override void Awake()
     {
+		base.Awake();
         m_uvTool = FindObjectOfType<UVTool>();
         if(m_uvTool == null)
         {
@@ -32,6 +33,15 @@ public class TextureLoadPanelBehaviour : UIBehaviour
         base.Show();
         UpdateListing();
     }
+	
+	public override void Hide()
+	{
+		base.Hide();
+		if(m_selectedRow != null)
+		{
+			m_selectedRow.Deselect();
+		}
+	}
 
     protected override void Start()
     {
@@ -74,8 +84,7 @@ public class TextureLoadPanelBehaviour : UIBehaviour
                     texture.LoadImage(bytes);
                     m_uvTool.m_texture = texture;
                 }
-                m_selectedRow.Deselect();
-                gameObject.SetActive(false);
+                Hide();
             }
             else
             {

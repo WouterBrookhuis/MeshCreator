@@ -14,6 +14,7 @@ public class SavePanelBehaviour : UIBehaviour
 
     protected override void Awake()
     {
+		base.Awake();
         m_meshManager = GameObject.FindObjectOfType<MeshManager>();
         if(m_meshManager == null)
         {
@@ -23,6 +24,7 @@ public class SavePanelBehaviour : UIBehaviour
 
     protected override void Start()
     {
+		base.Start();
         m_nameField = Find("Name").GetComponent<InputField>();
         m_saveButton = Find("Save").GetComponent<Button>();
         m_cancelButton = Find("Cancel").GetComponent<Button>();

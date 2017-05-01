@@ -15,6 +15,7 @@ public class ModalPanelBehaviour : UIBehaviour
 
     protected override void Awake()
     {
+		base.Awake();
         m_message = FindNested("Message").GetComponent<Text>();
         m_title = FindNested("Title").GetComponent<Text>();
         var buttons = GetComponentsInChildren<Button>();
@@ -27,12 +28,13 @@ public class ModalPanelBehaviour : UIBehaviour
 
     protected override void Start()
     {
+		base.Start();
         gameObject.SetActive(false);
     }
 
     public void Show(string title, string message, string[] buttons, OnButtonClicked callback)
     {
-        gameObject.SetActive(true);
+        base.Show();
         transform.SetAsLastSibling();
         m_delegate = callback;
         m_title.text = title;

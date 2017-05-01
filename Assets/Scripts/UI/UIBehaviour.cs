@@ -4,6 +4,27 @@ using UnityEngine;
 
 public class UIBehaviour : MonoBehaviour
 {
+	private bool m_isVisible;
+	
+	public bool isVisible
+	{
+		get
+		{
+			return m_isVisible;
+		}
+		set
+		{
+			if(value != m_isVisible)
+			{
+				if(value) {
+					Show();
+				} else {
+					Hide();
+				}
+			}
+		}
+	}
+	
     protected virtual void Start()
     {
 
@@ -16,21 +37,23 @@ public class UIBehaviour : MonoBehaviour
 
     public virtual void Show()
     {
+		m_isVisible = true;
         gameObject.SetActive(true);
     }
 
     public virtual void Hide()
     {
+		m_isVisible = false;
         gameObject.SetActive(false);
     }
 
 
-    protected GameObject Find(string name)
+    public GameObject Find(string name)
     {
         return Find(name, transform);
     }
 
-    protected GameObject Find(string name, Transform transform)
+    public GameObject Find(string name, Transform transform)
     {
         var t = transform.FindChild(name);
         if(t != null)
@@ -40,12 +63,12 @@ public class UIBehaviour : MonoBehaviour
         return null;
     }
 
-    protected GameObject FindNested(string name)
+    public GameObject FindNested(string name)
     {
         return FindNested(name, transform);
     }
 
-    protected GameObject FindNested(string name, Transform transform)
+    public GameObject FindNested(string name, Transform transform)
     {
         GameObject result = null;
 

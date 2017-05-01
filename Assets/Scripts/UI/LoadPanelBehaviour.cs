@@ -32,6 +32,15 @@ public class LoadPanelBehaviour : UIBehaviour
         base.Show();
         UpdateListing();
     }
+	
+	public override void Hide()
+	{
+		base.Hide();
+		if(m_selectedRow != null)
+		{
+			m_selectedRow.Deselect();
+		}
+	}
 
     protected override void Start()
     {
@@ -67,8 +76,7 @@ public class LoadPanelBehaviour : UIBehaviour
             if(File.Exists(m_savePath))
             {
                 m_meshManager.Load(m_savePath);
-                m_selectedRow.Deselect();
-                gameObject.SetActive(false);
+                Hide();
             }
             else
             {
